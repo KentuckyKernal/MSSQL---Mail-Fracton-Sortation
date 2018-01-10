@@ -1,0 +1,446 @@
+USE [MultiTableAutoMail]
+GO
+/****** Object:  StoredProcedure [dbo].[BEGGINING]    Script Date: 02/11/2017 14:33:24 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROC [dbo].[BEGGINING]
+AS
+
+ALTER TABLE [dbo].[BASE]
+  ADD [DateSent] DATETIME2(7);
+
+ALTER TABLE [dbo].[BASE]
+  ADD [UNDELIVERABLE] NVARCHAR(10);
+
+ALTER TABLE [dbo].[BASE]
+  ADD [RESPONSE] NVARCHAR(10);
+
+  EXEC [dbo].[PREFIX]
+
+
+==========================================
+
+USE [MultiTableAutoMail]
+GO
+/****** Object:  StoredProcedure [dbo].[PREFIX]    Script Date: 02/11/2017 14:33:42 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROC [dbo].[PREFIX]
+AS
+--THIS IS PERFORMED  --
+
+--START OF BASE TABLE ADJUSTMENTS-- 
+
+UPDATE [dbo].[BASE]
+SET 
+[DateSent] = (SELECT TOP 1 [DateSent] FROM [dbo].[Sent_Date_Table] WHERE [dbo].[BASE].[EMAIL] = [dbo].[Sent_Date_Table].[EmailAddress])
+
+UPDATE [dbo].[BASE]
+SET [UNDELIVERABLE] = 'NO'
+
+UPDATE [dbo].[BASE]
+SET [RESPONSE] = 'NO'
+
+--END OF BASE TABLE SETTING & ADJUSTMENTS--
+
+UPDATE [dbo].[INCOMING]
+SET [Undeliverable] = 'YES'
+WHERE [Subject] LIKE 'Undeliverable%'
+
+UPDATE [dbo].[INCOMING]
+SET [Response] = 'YES'
+WHERE [Subject] NOT LIKE 'Undeliverable%'
+
+DROP TABLE [dbo].[UNDELIVERABLES]
+
+
+  -- UNDELIVERABLES IS MADE HERE
+SELECT [EmailBody]
+INTO [dbo].[UNDELIVERABLES]
+FROM [dbo].[INCOMING]
+WHERE [Undeliverable] = 'YES'
+
+ALTER TABLE [dbo].[UNDELIVERABLES]
+  ADD [UK] INT;
+
+ALTER TABLE [dbo].[UNDELIVERABLES]
+  ADD [COM] INT;
+
+ALTER TABLE [dbo].[UNDELIVERABLES]
+  ADD [MAIL] INT;
+
+ ALTER TABLE [dbo].[UNDELIVERABLES]
+  ADD [DIFF1] INT;
+
+ALTER TABLE [dbo].[UNDELIVERABLES]
+  ADD [DIFF2] INT;
+
+ ALTER TABLE [dbo].[UNDELIVERABLES]
+  ADD [EmailHarvest] NVARCHAR(MAX);
+
+
+  EXEC [dbo].[ROUTINE1]
+		
+
+==========================================
+
+
+USE [MultiTableAutoMail]
+GO
+/****** Object:  StoredProcedure [dbo].[ROUTINE1]    Script Date: 02/11/2017 14:34:00 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROC [dbo].[ROUTINE1]
+AS
+
+
+DECLARE @COMINT INT;
+DECLARE @UKINT INT;
+DECLARE @MAIL INT;
+DECLARE @DIFF1 INT;
+DECLARE @DIFF2 INT;
+DECLARE @LENGTHCOM INT;
+DECLARE @LENGTHUK INT;
+DECLARE @MAILPLUS INT;
+
+SET @COMINT = (SELECT TOP 1 [COM] FROM [dbo].[UNDELIVERABLES]);
+SET @UKINT = (SELECT TOP 1 [UK] FROM [dbo].[UNDELIVERABLES]);
+SET @MAIL = (SELECT TOP 1 [MAIL] FROM [dbo].[UNDELIVERABLES]);
+SET @DIFF1 = (@COMINT - @MAIL);
+SET @DIFF2 = (@UKINT - @MAIL);
+SET @MAILPLUS = (@MAIL + 7);
+SET @LENGTHCOM = (@COMINT - @MAILPLUS);
+SET @LENGTHUK = (@UKINT - @MAILPLUS);
+
+UPDATE [dbo].[UNDELIVERABLES]
+	SET [MAIL]= CHARINDEX('mailto:', [EmailBody]);
+ 
+UPDATE [dbo].[UNDELIVERABLES]
+	SET [UK] = CHARINDEX('.co.uk"', [EmailBody]);
+ 
+UPDATE [dbo].[UNDELIVERABLES]
+	SET [COM] = CHARINDEX('.com"', [EmailBody]);
+
+UPDATE [dbo].[UNDELIVERABLES]
+	SET [DIFF1] = ([COM]-[MAIL]);
+
+UPDATE [dbo].[UNDELIVERABLES]
+	SET [DIFF2] = ([UK]-[MAIL]);
+
+DROP TABLE [dbo].[DOTCOM]
+
+SELECT * 
+INTO [dbo].[DOTCOM]
+FROM [dbo].[UNDELIVERABLES]
+WHERE [DIFF2] < [DIFF1]
+
+DROP TABLE [dbo].[DOTCUK]
+
+SELECT * 
+INTO [dbo].[DOTCUK]
+FROM [dbo].[UNDELIVERABLES]
+WHERE [DIFF1] < [DIFF2]
+
+
+SELECT * 
+INTO [dbo].[RESPONSE]
+FROM [dbo].[INCOMING]
+WHERE [Response] = 'YES';
+
+	EXEC [dbo].[ROUTINE1B]
+		  EXEC [dbo].[ROUTINE1C]
+
+===================================================
+
+
+USE [MultiTableAutoMail]
+GO
+/****** Object:  StoredProcedure [dbo].[ROUTINE1B]    Script Date: 02/11/2017 14:34:22 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROC [dbo].[ROUTINE1B]
+AS
+--insert one email body
+--begin extraction process
+
+DECLARE @EMIALADDRESS NVARCHAR(MAX);
+DECLARE @COMINT INT;
+DECLARE @UKINT INT;
+DECLARE @MAIL INT;
+DECLARE @DIFF1 INT;
+DECLARE @DIFF2 INT;
+DECLARE @LENGTHCOM INT;
+DECLARE @LENGTHUK INT;
+DECLARE @MAILPLUS INT;
+
+SET @COMINT = (SELECT TOP 1 [COM] FROM [dbo].[DOTCUK]);
+SET @UKINT = (SELECT TOP 1 [UK] FROM [dbo].[DOTCUK]);
+SET @MAIL = (SELECT TOP 1 [MAIL] FROM [dbo].[DOTCUK]);
+SET @DIFF1 = (@COMINT - @MAIL);
+SET @DIFF2 = (@UKINT - @MAIL);
+SET @MAILPLUS = (@MAIL + 7);
+SET @LENGTHCOM = (@COMINT - @MAILPLUS);
+SET @LENGTHUK = (@UKINT - @MAILPLUS);
+
+--[IF COM IS NOT ZERO AND DIFF1 IS SMALLER THAN DIFF2 THEN WE USE .COM PROCEDURE]--
+--[IF UK IS NOT ZERO AND DIFF1 IS LARGER THAN DIFF2 THEN WE USE .CO.UK PROCEDURE]--
+--[what is diff1?] <- number of characters between .com and mailto
+--[what is diff2] <- number of characters between
+
+
+
+
+--RUN INSERT STATEMENT [INSERT EMAILHARVEST INTO RESP&UND TABLE]
+--RUN STORED PROCEDURE [TRUNCATE TABLE_1]
+--RUN STORED PROCEDURE [DEDUPE PROPECTCLIENT 
+
+DECLARE EMAILCURSOR CURSOR
+
+FOR SELECT [EmailBody] FROM [dbo].[DOTCUK]
+FOR UPDATE OF [EmailHarvest]
+
+OPEN EMAILCURSOR
+
+	FETCH NEXT FROM EMAILCURSOR
+	INTO @EMIALADDRESS
+	
+	WHILE (@@FETCH_STATUS = 0)
+	BEGIN
+
+		
+		UPDATE [dbo].[DOTCUK]
+		SET [EmailHarvest] =  SUBSTRING([EmailBody], [MAIL]+7 ,(CHARINDEX('.co.uk', [EmailBody]))-(CHARINDEX('mailto:', [EmailBody]))-1) FROM [dbo].[DOTCUK]
+		
+		WHERE CURRENT OF EMAILCURSOR
+
+		FETCH NEXT FROM EMAILCURSOR
+		INTO @EMIALADDRESS;
+
+		
+		
+	END
+	 
+
+CLOSE EMAILCURSOR
+DEALLOCATE EMAILCURSOR
+
+
+===================================================
+
+
+USE [MultiTableAutoMail]
+GO
+/****** Object:  StoredProcedure [dbo].[ROUTINE1C]    Script Date: 02/11/2017 14:34:47 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROC [dbo].[ROUTINE1C]
+AS
+--insert one email body
+--begin extraction process
+
+DECLARE @EMIALADDRESS NVARCHAR(MAX);
+DECLARE @COMINT INT;
+DECLARE @UKINT INT;
+DECLARE @MAIL INT;
+DECLARE @DIFF1 INT;
+DECLARE @DIFF2 INT;
+DECLARE @LENGTHCOM INT;
+DECLARE @LENGTHUK INT;
+DECLARE @MAILPLUS INT;
+
+SET @COMINT = (SELECT TOP 1 [COM] FROM [dbo].[DOTCOM]);
+SET @UKINT = (SELECT TOP 1 [UK] FROM [dbo].[DOTCOM]);
+SET @MAIL = (SELECT TOP 1 [MAIL] FROM [dbo].[DOTCOM]);
+SET @DIFF1 = (@COMINT - @MAIL);
+SET @DIFF2 = (@UKINT - @MAIL);
+SET @MAILPLUS = (@MAIL + 7);
+SET @LENGTHCOM = (@COMINT - @MAILPLUS);
+SET @LENGTHUK = (@UKINT - @MAILPLUS);
+
+--[IF COM IS NOT ZERO AND DIFF1 IS SMALLER THAN DIFF2 THEN WE USE .COM PROCEDURE]--
+--[IF UK IS NOT ZERO AND DIFF1 IS LARGER THAN DIFF2 THEN WE USE .CO.UK PROCEDURE]--
+--[what is diff1?] <- number of characters between .com and mailto
+--[what is diff2] <- number of characters between
+
+
+
+
+--RUN INSERT STATEMENT [INSERT EMAILHARVEST INTO RESP&UND TABLE]
+--RUN STORED PROCEDURE [TRUNCATE TABLE_1]
+--RUN STORED PROCEDURE [DEDUPE PROPECTCLIENT 
+
+DECLARE EMAILCURSOR CURSOR
+
+FOR SELECT [EmailBody] FROM [dbo].[DOTCOM]
+FOR UPDATE OF [EmailHarvest]
+
+OPEN EMAILCURSOR
+
+	FETCH NEXT FROM EMAILCURSOR
+	INTO @EMIALADDRESS
+	
+	WHILE (@@FETCH_STATUS = 0)
+	BEGIN
+
+		UPDATE [dbo].[DOTCOM]
+		SET [EmailHarvest] =  SUBSTRING([EmailBody], [MAIL]+7,(CHARINDEX('.com', [EmailBody]))-(CHARINDEX('mailto:', [EmailBody]))-3) FROM [dbo].[DOTCOM]
+		
+		WHERE CURRENT OF EMAILCURSOR
+
+		FETCH NEXT FROM EMAILCURSOR
+		INTO @EMIALADDRESS;
+
+		
+		
+	END
+	 
+
+CLOSE EMAILCURSOR
+DEALLOCATE EMAILCURSOR
+
+		EXEC [dbo].[ROUTINE2] 
+
+
+
+=================================================
+
+
+USE [MultiTableAutoMail]
+GO
+/****** Object:  StoredProcedure [dbo].[ROUTINE2]    Script Date: 02/11/2017 14:35:07 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROC [dbo].[ROUTINE2] 
+AS
+
+		UPDATE [MultiTableAutoMail].[dbo].[BASE] 
+		SET [RESPONSE] = 'YES' 
+		FROM [MultiTableAutoMail].[dbo].[BASE] A 
+		JOIN [MultiTableAutoMail].[dbo].[RESPONSE] B 
+		ON A.[EMAIL] = B.[EmailAddress];
+
+
+		DROP TABLE [dbo].[SendResp]
+
+			SELECT *
+			INTO  [dbo].[SendResp]
+			FROM [dbo].[BASE]
+			WHERE [RESPONSE] = 'YES';
+
+
+			DROP TABLE [dbo].[SendOut]
+
+			SELECT *
+			INTO  [dbo].[SendOut]
+			FROM [dbo].[BASE]
+			WHERE [RESPONSE] = 'NO' and [UNDELIVERABLE] = 'NO';
+
+
+			  EXEC [dbo].[ROUTINE3]
+			
+
+======================================================
+
+USE [MultiTableAutoMail]
+GO
+/****** Object:  StoredProcedure [dbo].[ROUTINE3]    Script Date: 02/11/2017 14:35:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROC [dbo].[ROUTINE3]
+AS
+
+UPDATE [MultiTableAutoMail].[dbo].[BASE] 
+SET [UNDELIVERABLE] = 'YES' 
+FROM [MultiTableAutoMail].[dbo].[BASE] A 
+JOIN [MultiTableAutoMail].[dbo].[DOTCOM] B 
+ON A.[EMAIL] = B.[EmailHarvest];
+
+UPDATE [MultiTableAutoMail].[dbo].[BASE] 
+SET [UNDELIVERABLE] = 'YES' 
+FROM [MultiTableAutoMail].[dbo].[BASE] A 
+JOIN [MultiTableAutoMail].[dbo].[DOTCUK] B 
+ON A.[EMAIL] = B.[EmailHarvest];
+
+		
+
+DROP TABLE [dbo].[SendUndel]
+
+SELECT *
+INTO  [dbo].[SendUndel]
+FROM [dbo].[BASE]
+WHERE [UNDELIVERABLE] = 'YES';
+
+
+
+DROP TABLE [dbo].[SendOut]
+
+SELECT *
+INTO  [dbo].[SendOut]
+FROM [dbo].[BASE]
+WHERE [RESPONSE] = 'NO' and [UNDELIVERABLE] = 'NO';
+
+	EXEC [dbo].[ROUTINE4]
+
+
+=========================================
+
+USE [MultiTableAutoMail]
+GO
+/****** Object:  StoredProcedure [dbo].[ROUTINE4]    Script Date: 02/11/2017 14:35:44 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROC [dbo].[ROUTINE4]
+AS 	
+
+DROP TABLE [dbo].[SendUndel]
+
+SELECT *
+INTO  [dbo].[SendUndel]
+FROM [dbo].[BASE]
+WHERE [UNDELIVERABLE] = 'YES';
+
+
+
+DROP TABLE [dbo].[SendOut]
+
+SELECT *
+INTO  [dbo].[SendOut]
+FROM [dbo].[BASE]
+WHERE [RESPONSE] = 'NO' and [UNDELIVERABLE] = 'NO';
+
+ALTER TABLE [dbo].[BASE]
+DROP COLUMN [UNDELIVERABLE];
+
+ALTER TABLE [dbo].[BASE]
+DROP COLUMN [RESPONSE];
+
+ALTER TABLE [dbo].[BASE]
+DROP COLUMN [DateSent];
+
+
+
+
+
+
+
+
+
+
+
+
